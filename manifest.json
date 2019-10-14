@@ -1,7 +1,7 @@
 {
       "domain": "kismet",
       "name": "Kismet tracker",
-      "documentation": "https://github.com/mad-ady/home-assistant-customizations/tree/master/custom_components/kismet",
+      "documentation": "https://github.com/mad-ady/ha-kismet-device-tracker",
       "requirements": [
            "requests"
       ],
