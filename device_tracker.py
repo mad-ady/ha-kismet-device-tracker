@@ -161,20 +161,26 @@ class KismetScanner:
         _LOGGER.debug("Preparing kismet query...")
         last_results = []
         # prepare the query
-        location_prefix = 'dot11.device/dot11.device.last_beaconed_ssid_record/dot11.advertisedssid.location/kismet.common.location.avg_loc/kismet.common.location'
+        ssid_gps_prefix = 'dot11.device/dot11.device.last_beaconed_ssid_record/dot11.advertisedssid.location/kismet.common.location.avg_loc'
+        client_gps_prefix = 'dot11.device/dot11.device.last_probed_ssid_record/dot11.probedssid.location/kismet.common.location.avg_loc'
         parameters = {}
         parameters['regex'] = []
+        
+        if len(self.ssids):
+            parameters["fields"].append(ssid_gps_prefix)
+        
+        if len(self.clients):
+            parameters["fields"].append(client_gps_prefix)
+
         for ssid in self.ssids:
             _LOGGER.debug("Adding SSID " + ssid + "...")
-            parameters['regex'].append(['dot11.device/dot11.device.last_beaconed_ssid', str(ssid)])
+            parameters['regex'].append(['kismet.device.base.name', str(ssid)])
 
         for client in self.clients:
             _LOGGER.debug("Adding client " + client + "...")
             parameters['regex'].append(['kismet.device.base.macaddr', str(client).upper()])
 
-        parameters['fields'] = ('kismet.device.base.macaddr', 'kismet.device.base.name', '%s.lat' % location_prefix,
-                                '%s.lon' % location_prefix, '%s.fix' % location_prefix, '%s.alt' % location_prefix,
-                                '%s.time_usec' % location_prefix)
+        parameters['fields'] = ('kismet.device.base.macaddr', 'kismet.device.base.name')
 
         # payload = "json="+urllib.parse.quote_plus(json.dumps(parameters))
         payload = "json=" + json.dumps(parameters)
@@ -197,30 +203,18 @@ class KismetScanner:
                          device = {}
                          device['name'] = pair['kismet.device.base.macaddr']
                          device['id'] = pair['kismet.device.base.macaddr']
+                         
                          # parse location information (if any)
                          device['location'] = {}
-                         try:
-                            device['location']['latitude'] = pair['%s.lat' % location_prefix]
-                            device['location']['longitude'] = pair['%s.lon' % location_prefix]
-                            device['location']['altitude'] = pair['%s.alt' % location_prefix]
-                            device['location']['fix'] = pair['%s.fix' % location_prefix]
-                            device['location']['ts'] = pair['%s.time_sec' % location_prefix]
+                         if "dot11.probedssid.location" in pair and pair["dot11.probedssid.location"] != 0:
+                             gps = pair["dot11.probedssid.gps"]
+                         elif "dot11.advertisedssid.location" in pair and pair["dot11.advertisedssid.location"] != 0:
+                             gps = pair["dot11.advertisedssid.location"]
 
-                            _LOGGER.debug("Location: %s/%s alt %s (%s) @ %s" % (device['location']['latitude'],
-                                                                                device['location']['longitude'],
-                                                                                device['location']['altitude'],
-                                                                                device['location']['fix'],
-                                                                                device['location']['ts']))
-
-                            assert device['location']['latitude'] != 0
-                            assert device['location']['longitude'] != 0
-                            assert device['location']['fix'] != 0
-                         except:
-                             device['location']['latitude'] = None
-                             device['location']['longitude'] = None
-                             device['location']['altitude'] = None
-                             device['location']['fix'] = None
-                             device['location']['ts'] = None
+                         if gps and "kismet.common.location.loc_valid" in gps and gps["kismet.common.location.loc_valid"] == 1:
+                             # instead of delving further into the structure, we use the integer coordinates
+                             device['location']['latitude'] = gps["kismet.common.location.avg_lat"] * .000001
+                             device['location']['longitude'] = gps["kismet.common.location.avg_lon"] * .000001
 
                          self._update_device(device, device['id'])
                          last_results.append(device)
